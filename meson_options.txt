@@ -11,6 +11,11 @@
 # indicate that you have read the license and understand and accept it
 # fully.
 
+# LWJGL: Allow renaming the library basename (for harfbuzz subproject: avoids multiple libfreetype.6.dylib link conflict)
+option('libname',
+  type: 'string',
+  value: 'freetype',
+  description: 'Basename of the FreeType library artifact')
 
 option('brotli',
   type: 'feature',

@@ -15,6 +15,9 @@
  *
  */
 
+#if !defined(_GNU_SOURCE)
+  #define _GNU_SOURCE
+#endif
 
 #if !defined( _WIN32 ) && !defined( _GNU_SOURCE )
 #  define _GNU_SOURCE  1  /* for RTLD_DEFAULT */
@@ -47,6 +50,9 @@
 
 #  include <windows.h>
 
+// LWJGL HarfBuzz path override
+FT_EXPORT_DEF(LPCWSTR) _freetype_harfbuzz_library = NULL;
+
 #else /* !_WIN32 */
 
 #  include <dlfcn.h>
@@ -61,6 +67,9 @@
 #      pragma GCC diagnostic ignored "-Wpedantic"
 #    endif
 #  endif
+
+// LWJGL HarfBuzz path override
+FT_EXPORT_DEF(char const *) _freetype_harfbuzz_library = NULL;
 
 #endif /* !_WIN32 */
 
@@ -93,17 +102,35 @@
 
 #ifdef _WIN32
 
-    lib = LoadLibraryA( FT_LIBHARFBUZZ );
-    if ( !lib )
-      goto Fail;
+    if ( _freetype_harfbuzz_library )
+    {
+        lib = LoadLibraryW( _freetype_harfbuzz_library );
+        if ( !lib )
+        {
+            lib = LoadLibraryA( FT_LIBHARFBUZZ );
+            if ( !lib )
+              goto Fail;
+        }
+    }
     version_atleast = DLSYM( lib, hb_version_atleast );
 
 #else /* !_WIN32 */
 
+    if ( _freetype_harfbuzz_library )
+    {
+        lib = dlopen( _freetype_harfbuzz_library, RTLD_LAZY | RTLD_GLOBAL );
+        if ( lib ) {
+            version_atleast = DLSYM( lib, hb_version_atleast );
+        }
+    }
+
 #  ifdef RTLD_DEFAULT
 #    define FT_RTLD_FLAGS RTLD_LAZY | RTLD_GLOBAL
-    lib             = RTLD_DEFAULT;
-    version_atleast = DLSYM( lib, hb_version_atleast );
+    if ( !version_atleast )
+    {
+        lib             = RTLD_DEFAULT;
+        version_atleast = DLSYM( lib, hb_version_atleast );
+    }
 #  else
 #    define FT_RTLD_FLAGS RTLD_LAZY
 #  endif

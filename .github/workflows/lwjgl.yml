@@ -1,0 +1,277 @@
+# IMPORTANT: after HEAD is updated, the "LWJGL" tag must be recreated!
+name: LWJGL Build
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - master
+
+env:
+  AWS_DEFAULT_REGION: us-east-1
+  AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+  AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+  S3_PARAMS: --cache-control "public,must-revalidate,proxy-revalidate,max-age=0"
+  FREETYPE_PARAMS: --wrap-mode=default --force-fallback-for=harfbuzz,libpng,zlib -Dbrotli=disabled -Dbzip2=disabled -Dharfbuzz=enabled -Dpng=enabled -Dzlib=system -Dtests=disabled -Dbuildtype=release -Dfreetype2:zlib=disabled -Dfreetype2:png=disabled -Dharfbuzz:experimental_api=true -Dharfbuzz:subset=disabled -Dharfbuzz:raster=disabled -Dharfbuzz:vector=disabled -Db_lto=true -Db_ndebug=true -Derror_strings=true
+
+jobs:
+  linux:
+    name: Linux
+    runs-on: ubuntu-latest
+    container:
+      image: almalinux:8
+    strategy:
+      fail-fast: false
+      matrix:
+        ARCH: [ x64 ]
+        include:
+          - ARCH: x64
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Install git
+        run: dnf -y install git
+      - name: Clone repository
+        run: git clone --depth 3 https://github.com/${{ github.repository }}.git .
+      - name: Install build dependencies
+        run: |
+          dnf -y install epel-release wget
+          dnf config-manager --set-enabled powertools
+          dnf -y update
+          dnf -y install gcc-toolset-15-gcc gcc-toolset-15-gcc-c++ awscli
+      - name: Install FreeType dependencies
+        run: |
+          dnf -y install python3-pip ninja-build
+          pip3 install meson
+      - name: Configure build
+        run: |
+          source /opt/rh/gcc-toolset-15/enable || true
+          meson setup build $FREETYPE_PARAMS
+      - name: Build
+        run: |
+          source /opt/rh/gcc-toolset-15/enable || true
+          meson compile --verbose -C build
+          strip build/libfreetype.so
+      - name: Upload artifact
+        run: aws s3 cp build/libfreetype.so s3://lwjgl-build/nightly/linux/${{matrix.ARCH}}/ ${{env.S3_PARAMS}}
+      - name: Upload git revision
+        run: |
+          git config --global --add safe.directory $PWD
+          git log --first-parent --pretty=format:%H HEAD~2..HEAD~1 > libfreetype.so.git
+          aws s3 cp libfreetype.so.git s3://lwjgl-build/nightly/linux/${{matrix.ARCH}}/ ${{env.S3_PARAMS}}
+
+  linux-cross:
+    name: Linux Cross
+    runs-on: ${{matrix.RUNNER}}
+    strategy:
+      fail-fast: false
+      matrix:
+        ARCH: [arm32, arm64, ppc64le, riscv64]
+        include:
+          - ARCH: arm32
+            RUNNER: ubuntu-22.04
+            CROSS_ARCH: armhf
+            TRIPLET: arm-linux-gnueabihf
+            GCC: 12
+          - ARCH: arm64
+            RUNNER: ubuntu-22.04
+            CROSS_ARCH: arm64
+            TRIPLET: aarch64-linux-gnu
+            GCC: 12
+          - ARCH: ppc64le
+            RUNNER: ubuntu-22.04
+            CROSS_ARCH: ppc64el
+            TRIPLET: powerpc64le-linux-gnu
+            GCC: 12
+          - ARCH: riscv64
+            RUNNER: ubuntu-24.04
+            CROSS_ARCH: riscv64
+            TRIPLET: riscv64-linux-gnu
+            GCC: 14
+    env:
+      LWJGL_ARCH: ${{matrix.ARCH}}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 3
+      - name: Install dependencies
+        run: |
+          DEBIAN_FRONTEND=noninteractive sudo apt-get -yq update
+          DEBIAN_FRONTEND=noninteractive sudo apt-get -yq install \
+            gcc-${{matrix.GCC}}-${{matrix.TRIPLET}} \
+            g++-${{matrix.GCC}}-${{matrix.TRIPLET}} \
+            libc6-dev-${{matrix.CROSS_ARCH}}-cross
+      - name: Install FreeType dependencies
+        run: |
+          DEBIAN_FRONTEND=noninteractive sudo apt-get -yq install python3-pip ninja-build
+          pip3 install meson
+      - name: Configure build
+        run: |
+          export PKG_CONFIG_LIBDIR="/usr/lib/${{matrix.TRIPLET}}/pkgconfig:/usr/share/pkgconfig"
+          meson setup build $FREETYPE_PARAMS --cross-file lwjgl_linux_${{matrix.ARCH}}.cross
+      - name: Build
+        run: |
+          meson compile --verbose -C build
+          ${{matrix.TRIPLET}}-strip build/libfreetype.so
+      - name: Upload artifact
+        run: aws s3 cp build/libfreetype.so s3://lwjgl-build/nightly/linux/${{matrix.ARCH}}/ ${{env.S3_PARAMS}}
+      - name: Upload git revision
+        run: |
+          git config --global --add safe.directory $(pwd)
+          git log --first-parent --pretty=format:%H HEAD~2..HEAD~1 > libfreetype.so.git
+          aws s3 cp libfreetype.so.git s3://lwjgl-build/nightly/linux/${{matrix.ARCH}}/ ${{env.S3_PARAMS}}
+
+  freebsd-cross:
+    name: FreeBSD Cross
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 3
+      - name: Start VM
+        uses: cross-platform-actions/action@v1.3.0
+        with:
+          operating_system: freebsd
+          architecture: x86-64
+          version: '14.4'
+          memory: 4G
+          environment_variables: FREETYPE_PARAMS
+      - name: Install build dependencies
+        shell: cpa.sh {0}
+        run: |
+          sudo pkg install -y git python3 ninja
+          python3 -m ensurepip --upgrade
+          export PATH=$PATH:/home/runner/.local/bin
+          pip3 install meson
+      - name: Install dependencies
+        shell: cpa.sh {0}
+        run: sudo pkg install -y png
+      - name: Configure build
+        shell: cpa.sh {0}
+        run: |
+          export PATH=$PATH:/home/runner/.local/bin
+          meson setup build $FREETYPE_PARAMS
+      - name: Build
+        shell: cpa.sh {0}
+        run: |
+          export PATH=$PATH:/home/runner/.local/bin
+          meson compile --verbose -C build
+          strip build/libfreetype.so
+      - name: Upload artifact # Symlinks are not copied out of the VM. These SOs are versioned.
+        #run: aws s3 cp `find -E . -maxdepth 2 -regex './build/libfreetype.so(\.[0-9]+)*'` s3://lwjgl-build/nightly/freebsd/x64/libfreetype.so ${{env.S3_PARAMS}}
+        run: aws s3 cp build/libfreetype.so s3://lwjgl-build/nightly/freebsd/x64/ ${{env.S3_PARAMS}}
+      - name: Upload git revision
+        run: |
+          git config --global --add safe.directory $PWD
+          git log --first-parent --pretty=format:%H HEAD~2..HEAD~1 > libfreetype.so.git
+          aws s3 cp libfreetype.so.git s3://lwjgl-build/nightly/freebsd/x64/ ${{env.S3_PARAMS}}
+
+  macos:
+    name: macOS
+    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        ARCH: [x64, arm64]
+        include:
+          - ARCH: x64
+            MACOS: 10.11
+            MESON_PARAMS: --cross-file lwjgl_macos_x64.cross
+          - ARCH: arm64
+            MACOS: 11.0
+            MESON_PARAMS: --cross-file lwjgl_macos_arm64.cross
+            env:
+              MACOSX_DEPLOYMENT_TARGET: 11.0
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 3
+      - name: Install dependencies
+        run: brew install pkg-config meson
+      - name: Configure build
+        run: MACOSX_DEPLOYMENT_TARGET=${{matrix.MACOS}} meson setup build $FREETYPE_PARAMS -Dharfbuzz:coretext=enabled ${{matrix.MESON_PARAMS}}
+      - name: Build
+        run: |
+          MACOSX_DEPLOYMENT_TARGET=${{matrix.MACOS}} meson compile --verbose -C build
+          strip -u -r build/libfreetype.dylib
+      - name: Upload artifact
+        run: aws s3 cp build/libfreetype.dylib s3://lwjgl-build/nightly/macosx/${{matrix.ARCH}}/ ${{env.S3_PARAMS}}
+      - name: Upload git revision
+        run: |
+          git log --first-parent --pretty=format:%H HEAD~2..HEAD~1 > libfreetype.dylib.git
+          aws s3 cp libfreetype.dylib.git s3://lwjgl-build/nightly/macosx/${{matrix.ARCH}}/ ${{env.S3_PARAMS}}
+
+  windows:
+    name: Windows
+    runs-on: windows-2022
+    strategy:
+      fail-fast: false
+      matrix:
+        ARCH: [x86, x64, arm64]
+        include:
+          - ARCH: x86
+            MSVC_ARCH: amd64_x86
+            #MSVC_ARCH: x86
+            PLATFORM: Win32
+            MESON_PARAMS:
+            #VCTOOLS: x86.x64
+          - ARCH: x64
+            MSVC_ARCH: amd64
+            PLATFORM: x64
+            MESON_PARAMS:
+            #VCTOOLS: x86.x64
+          - ARCH: arm64
+            MSVC_ARCH: amd64_arm64
+            #MSVC_ARCH: arm64
+            PLATFORM: ARM64
+            MESON_PARAMS: --cross-file lwjgl_windows_arm64.cross
+            #VCTOOLS: ARM64
+    defaults:
+      run:
+        shell: cmd
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 3
+      - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: ${{matrix.MSVC_ARCH}}
+#      - name: Install Visual Studio 2026 Build Tools
+#        shell: pwsh
+#        run: |
+#          choco install visualstudio2026buildtools --package-parameters "`
+#            --add Microsoft.VisualStudio.Workload.VCTools `
+#            --add Microsoft.VisualStudio.Component.VC.Tools.${{matrix.VCTOOLS}} `
+#            --includeRecommended `
+#            --quiet" `
+#            -y `
+#            --ignore-package-exit-codes=3010
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.14'
+      # Strawberry Perl is installed by default on the Windows runner, adding a bunch of horrible stuff to PATH.
+      # Including a freetype build... which Meson picks up. Just nuke it here and everything will be fine.
+      # See https://github.com/actions/runner-images/issues/5459 for details. We haven't encountered this before
+      # because Meson uses .a for static MSVC libraries, instead of the usual .lib suffix.
+      - name: Install dependencies
+        run: |
+          pip3 install meson
+          rmdir C:\Strawberry /s /q
+      - name: Configure build
+        #call C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\Common7\Tools\VsDevCmd.bat -host_arch=amd64 -arch=${{matrix.MSVC_ARCH}}
+        run: meson setup build %FREETYPE_PARAMS% -Db_vscrt=mt -Dharfbuzz:gdi=enabled -Dharfbuzz:directwrite=enabled ${{matrix.MESON_PARAMS}}
+      - name: Build
+        #call "C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\Common7\Tools\VsDevCmd.bat" -host_arch=amd64 -arch=${{matrix.MSVC_ARCH}}
+        run: meson compile --verbose -C build
+      - name: Upload artifact
+        run: aws s3 cp build\freetype-6.dll s3://lwjgl-build/nightly/windows/${{matrix.ARCH}}/freetype.dll ${{env.S3_PARAMS}}
+      - name: Upload git revision
+        run: |
+          git log --first-parent --pretty=format:%%H HEAD~2..HEAD~1 > freetype.dll.git
+          aws s3 cp freetype.dll.git s3://lwjgl-build/nightly/windows/${{matrix.ARCH}}/ ${{env.S3_PARAMS}}

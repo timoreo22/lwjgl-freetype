@@ -31,6 +31,14 @@ FT_BEGIN_HEADER
 
 #  ifdef FT_CONFIG_OPTION_USE_HARFBUZZ_DYNAMIC
 
+// LWJGL HarfBuzz path override
+#    ifdef _WIN32
+#      include <windows.h>
+FT_EXPORT(LPCWSTR) _freetype_harfbuzz_library;
+#    else /* !_WIN32 */
+FT_EXPORT(char const *) _freetype_harfbuzz_library;
+#    endif /* !_WIN32 */
+
 #    define HB_EXTERN( ret, name, args ) \
               typedef ret (*ft_ ## name ## _func_t) args;
 #    include "ft-hb-decls.h"
