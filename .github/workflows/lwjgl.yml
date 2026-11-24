@@ -8,10 +8,6 @@ on:
       - master
 
 env:
-  AWS_DEFAULT_REGION: us-east-1
-  AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-  AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-  S3_PARAMS: --cache-control "public,must-revalidate,proxy-revalidate,max-age=0"
   FREETYPE_PARAMS: --wrap-mode=default --force-fallback-for=harfbuzz,libpng,zlib -Dbrotli=disabled -Dbzip2=disabled -Dharfbuzz=enabled -Dpng=enabled -Dzlib=system -Dtests=disabled -Dbuildtype=release -Dfreetype2:zlib=disabled -Dfreetype2:png=disabled -Dharfbuzz:experimental_api=true -Dharfbuzz:subset=disabled -Dharfbuzz:raster=disabled -Dharfbuzz:vector=disabled -Db_lto=true -Db_ndebug=true -Derror_strings=true
 
 jobs:
@@ -54,12 +50,10 @@ jobs:
           meson compile --verbose -C build
           strip build/libfreetype.so
       - name: Upload artifact
-        run: aws s3 cp build/libfreetype.so s3://lwjgl-build/nightly/linux/${{matrix.ARCH}}/ ${{env.S3_PARAMS}}
-      - name: Upload git revision
-        run: |
-          git config --global --add safe.directory $PWD
-          git log --first-parent --pretty=format:%H HEAD~2..HEAD~1 > libfreetype.so.git
-          aws s3 cp libfreetype.so.git s3://lwjgl-build/nightly/linux/${{matrix.ARCH}}/ ${{env.S3_PARAMS}}
+        uses: actions/upload-artifact@v7
+        with:
+          name: libfreetype-${{ runner.os }}-${{matrix.ARCH}}.so
+          path: build/libfreetype.so
 
   linux-cross:
     name: Linux Cross
@@ -118,12 +112,10 @@ jobs:
           meson compile --verbose -C build
           ${{matrix.TRIPLET}}-strip build/libfreetype.so
       - name: Upload artifact
-        run: aws s3 cp build/libfreetype.so s3://lwjgl-build/nightly/linux/${{matrix.ARCH}}/ ${{env.S3_PARAMS}}
-      - name: Upload git revision
-        run: |
-          git config --global --add safe.directory $(pwd)
-          git log --first-parent --pretty=format:%H HEAD~2..HEAD~1 > libfreetype.so.git
-          aws s3 cp libfreetype.so.git s3://lwjgl-build/nightly/linux/${{matrix.ARCH}}/ ${{env.S3_PARAMS}}
+        uses: actions/upload-artifact@v7
+        with:
+          name: libfreetype-${{ runner.os }}-${{matrix.ARCH}}.so
+          path: build/libfreetype.so
 
   freebsd-cross:
     name: FreeBSD Cross
@@ -163,14 +155,11 @@ jobs:
           export PATH=$PATH:/home/runner/.local/bin
           meson compile --verbose -C build
           strip build/libfreetype.so
-      - name: Upload artifact # Symlinks are not copied out of the VM. These SOs are versioned.
-        #run: aws s3 cp `find -E . -maxdepth 2 -regex './build/libfreetype.so(\.[0-9]+)*'` s3://lwjgl-build/nightly/freebsd/x64/libfreetype.so ${{env.S3_PARAMS}}
-        run: aws s3 cp build/libfreetype.so s3://lwjgl-build/nightly/freebsd/x64/ ${{env.S3_PARAMS}}
-      - name: Upload git revision
-        run: |
-          git config --global --add safe.directory $PWD
-          git log --first-parent --pretty=format:%H HEAD~2..HEAD~1 > libfreetype.so.git
-          aws s3 cp libfreetype.so.git s3://lwjgl-build/nightly/freebsd/x64/ ${{env.S3_PARAMS}}
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: libfreetype-FreeBSD-${{matrix.ARCH}}.so
+          path: build/libfreetype.so
 
   macos:
     name: macOS
@@ -201,11 +190,10 @@ jobs:
           MACOSX_DEPLOYMENT_TARGET=${{matrix.MACOS}} meson compile --verbose -C build
           strip -u -r build/libfreetype.dylib
       - name: Upload artifact
-        run: aws s3 cp build/libfreetype.dylib s3://lwjgl-build/nightly/macosx/${{matrix.ARCH}}/ ${{env.S3_PARAMS}}
-      - name: Upload git revision
-        run: |
-          git log --first-parent --pretty=format:%H HEAD~2..HEAD~1 > libfreetype.dylib.git
-          aws s3 cp libfreetype.dylib.git s3://lwjgl-build/nightly/macosx/${{matrix.ARCH}}/ ${{env.S3_PARAMS}}
+        uses: actions/upload-artifact@v7
+        with:
+          name: libfreetype-${{ runner.os }}-${{matrix.ARCH}}.dylib
+          path: build/libfreetype.dylib
 
   windows:
     name: Windows
@@ -270,8 +258,7 @@ jobs:
         #call "C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\Common7\Tools\VsDevCmd.bat" -host_arch=amd64 -arch=${{matrix.MSVC_ARCH}}
         run: meson compile --verbose -C build
       - name: Upload artifact
-        run: aws s3 cp build\freetype-6.dll s3://lwjgl-build/nightly/windows/${{matrix.ARCH}}/freetype.dll ${{env.S3_PARAMS}}
-      - name: Upload git revision
-        run: |
-          git log --first-parent --pretty=format:%%H HEAD~2..HEAD~1 > freetype.dll.git
-          aws s3 cp freetype.dll.git s3://lwjgl-build/nightly/windows/${{matrix.ARCH}}/ ${{env.S3_PARAMS}}
+        uses: actions/upload-artifact@v7
+        with:
+          name: freetype-${{ runner.os }}-${{matrix.ARCH}}.dll
+          path: build/freetype-6.dll
