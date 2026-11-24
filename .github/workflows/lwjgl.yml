@@ -3,6 +3,7 @@ name: LWJGL Build
 
 on:
   workflow_dispatch:
+  workflow_call:
   push:
     branches:
       - master
@@ -68,6 +69,6 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v7
         with:
-          name: lwjgl-freetype-3.4.3-mojang-2.15.0-natives-linux-${{matrix.ARCH}}.jar
+          name: lwjgl-freetype-natives-linux-${{matrix.ARCH}}.jar
           path: lwjgl-freetype-3.4.3-mojang-2.15.0-natives-linux-${{matrix.ARCH}}.jar
 

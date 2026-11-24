@@ -1,0 +1,31 @@
+name: Release
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build_release:
+    name: Build Release
+    uses: ./.github/workflows/lwjgl.yml
+    permissions:
+      contents: read
+  create_release:
+    needs: build_release
+    permissions:
+      contents: write
+    runs-on: ubuntu-slim
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v8
+      - name: Move artifacts
+        run: |
+          mv lwjgl-freetype*/*.jar .
+      - name: Create release
+        uses: softprops/action-gh-release@v3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          name: LWJGL Patched freetype
+          draft: true
+          prerelease: false
+          fail_on_unmatched_files: true
+          files: '*.jar'
