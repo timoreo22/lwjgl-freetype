@@ -1,0 +1,17 @@
+JarIndex-Version: 1.0
+
+lwjgl-freetype-natives-linux-riscv64.jar
+META-INF
+META-INF/linux
+META-INF/linux/riscv64
+META-INF/linux/riscv64/org
+META-INF/linux/riscv64/org/lwjgl
+META-INF/linux/riscv64/org/lwjgl/freetype
+META-INF/versions
+META-INF/versions/11
+linux
+linux/riscv64
+linux/riscv64/org
+linux/riscv64/org/lwjgl
+linux/riscv64/org/lwjgl/freetype
+

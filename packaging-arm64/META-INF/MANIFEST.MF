@@ -1,0 +1,12 @@
+Manifest-Version: 1.0
+Ant-Version: Apache Ant 1.10.14
+Created-By: 27-beta+32 (Azul Systems, Inc.)
+Specification-Title: Lightweight Java Game Library - FreeType
+Specification-Version: 3.4.3
+Specification-Vendor: lwjgl.org
+Implementation-Title: lwjgl-freetype
+Implementation-Version: build 4
+Implementation-Vendor: lwjgl.org
+LWJGL-Platform: linux/arm64
+Multi-Release: true
+
